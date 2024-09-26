@@ -1,5 +1,7 @@
 # ML Classification Visualizer
 
+Deployed demo: https://ml-classification-visualizer.streamlit.app/
+
 ## Overview
 
 The ML Classification Visualizer is a Streamlit application designed to help users visualize and evaluate machine learning classification models. This application supports various machine learning algorithms, enabling users to upload their datasets, preprocess the data, train models, and visualize key performance metrics.
