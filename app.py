@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score, learning_curve
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_curve, auc
@@ -41,9 +41,9 @@ st.write("### Data Summary")
 st.write(df.describe(include='all'))
 
 # Missing Data Visualizer
-with st.expander("Missing Data"):
-    missing_values = df.isnull().sum() / len(df) * 100
-    st.bar_chart(missing_values)
+st.write("### Missing Data")
+missing_values = df.isnull().sum() / len(df) * 100
+st.bar_chart(missing_values)
 
 # Sidebar for feature selection
 st.sidebar.header("Feature Selection")
@@ -67,7 +67,7 @@ categorical_cols = df[features].select_dtypes(include=['object']).columns.tolist
 # Apply one-hot encoding to categorical features
 df_encoded = pd.get_dummies(df, columns=categorical_cols)
 
-# Label encode the target if it's categorical
+# Label encode the target if it's categorical or contains non-numeric values
 if df[target].dtype == 'object':
     le = LabelEncoder()
     df_encoded[target] = le.fit_transform(df[target])
@@ -80,41 +80,45 @@ y = df_encoded[target]
 st.sidebar.header("Choose Algorithm")
 algorithm = st.sidebar.selectbox("Select ML Algorithm", ["Decision Tree", "Logistic Regression", "Random Forest", "SVM"])
 
+# Create an empty container for model parameters
+param_container = st.sidebar.empty()
+
 # Sidebar for model parameters depending on the selected algorithm
-st.sidebar.header("Model Parameters")
+with param_container.container():
+    st.sidebar.header("Model Parameters")
+
+    # Initialize classifier based on selection
+    if algorithm == "Decision Tree":
+        max_depth = st.sidebar.slider("Max Depth", 1, 10, 3)
+        min_samples_split = st.sidebar.slider("Min Samples Split", 2, 10, 2)
+        min_samples_leaf = st.sidebar.slider("Min Samples Leaf", 1, 10, 1)
+        max_features = st.sidebar.selectbox("Max Features", [None, "sqrt", "log2"], index=0)
+        criterion = st.sidebar.selectbox("Criterion", ["gini", "entropy"], index=0)
+        clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=min_samples_split, 
+                                     criterion=criterion, min_samples_leaf=min_samples_leaf, max_features=max_features)
+
+    elif algorithm == "Logistic Regression":
+        penalty = st.sidebar.selectbox("Penalty", ["l2", "none"])
+        C = st.sidebar.slider("Inverse Regularization Strength (C)", 0.01, 10.0, 1.0)
+        solver = st.sidebar.selectbox("Solver", ["lbfgs", "liblinear", "saga"])
+        clf = LogisticRegression(penalty=penalty, C=C, solver=solver, max_iter=1000)
+
+    elif algorithm == "Random Forest":
+        n_estimators = st.sidebar.slider("Number of Estimators", 10, 200, 100)
+        max_depth = st.sidebar.slider("Max Depth", 1, 20, 10)
+        min_samples_split = st.sidebar.slider("Min Samples Split", 2, 10, 2)
+        min_samples_leaf = st.sidebar.slider("Min Samples Leaf", 1, 10, 1)
+        clf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, 
+                                     min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf)
+
+    elif algorithm == "SVM":
+        kernel = st.sidebar.selectbox("Kernel", ["linear", "rbf", "poly"])
+        C = st.sidebar.slider("Regularization Strength (C)", 0.01, 10.0, 1.0)
+        gamma = st.sidebar.selectbox("Gamma", ["scale", "auto"])
+        clf = SVC(kernel=kernel, C=C, gamma=gamma, probability=True)
 
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-
-# Initialize classifier based on selection
-if algorithm == "Decision Tree":
-    max_depth = st.sidebar.slider("Max Depth", 1, 10, 3)
-    min_samples_split = st.sidebar.slider("Min Samples Split", 2, 10, 2)
-    min_samples_leaf = st.sidebar.slider("Min Samples Leaf", 1, 10, 1)
-    max_features = st.sidebar.selectbox("Max Features", [None, "sqrt", "log2"], index=0)
-    criterion = st.sidebar.selectbox("Criterion", ["gini", "entropy"], index=0)
-    clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=min_samples_split, 
-                                 criterion=criterion, min_samples_leaf=min_samples_leaf, max_features=max_features)
-
-elif algorithm == "Logistic Regression":
-    penalty = st.sidebar.selectbox("Penalty", ["l2", "none"])
-    C = st.sidebar.slider("Inverse Regularization Strength (C)", 0.01, 10.0, 1.0)
-    solver = st.sidebar.selectbox("Solver", ["lbfgs", "liblinear", "saga"])
-    clf = LogisticRegression(penalty=penalty, C=C, solver=solver, max_iter=1000)
-
-elif algorithm == "Random Forest":
-    n_estimators = st.sidebar.slider("Number of Estimators", 10, 200, 100)
-    max_depth = st.sidebar.slider("Max Depth", 1, 20, 10)
-    min_samples_split = st.sidebar.slider("Min Samples Split", 2, 10, 2)
-    min_samples_leaf = st.sidebar.slider("Min Samples Leaf", 1, 10, 1)
-    clf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, 
-                                 min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf)
-
-elif algorithm == "SVM":
-    kernel = st.sidebar.selectbox("Kernel", ["linear", "rbf", "poly"])
-    C = st.sidebar.slider("Regularization Strength (C)", 0.01, 10.0, 1.0)
-    gamma = st.sidebar.selectbox("Gamma", ["scale", "auto"])
-    clf = SVC(kernel=kernel, C=C, gamma=gamma, probability=True)
 
 # Train the selected classifier
 clf.fit(X_train, y_train)
@@ -146,8 +150,18 @@ with st.expander("Classification Report"):
 if algorithm in ["Decision Tree", "Random Forest"]:
     with st.expander("Feature Importance"):
         importance = pd.Series(clf.feature_importances_, index=X.columns)
+        importance_sorted = importance.sort_values(ascending=False)
+        
+        # Select top N features
+        top_n = st.slider("Number of Top Features to Display", 5, len(importance), 10)
+        importance_sorted = importance_sorted.head(top_n)
+        
         fig2, ax2 = plt.subplots()
-        importance.plot(kind='bar', ax=ax2)
+        importance_sorted.plot(kind='bar', ax=ax2)
+        ax2.set_title("Top Feature Importances")
+        ax2.set_ylabel("Importance")
+        ax2.set_xlabel("Features")
+        plt.xticks(rotation=45, ha='right')
         st.pyplot(fig2)
 
 # Visualize the decision tree (only for Decision Tree)
@@ -171,11 +185,12 @@ if len(set(y_test)) == 2:  # Only for binary classification
         y_prob = clf.decision_function(X_test)
     fpr, tpr, _ = roc_curve(y_test, y_prob)
     auc_score = auc(fpr, tpr)
-    st.write(f"### AUC: {auc_score:.2f}")
-    fig3, ax3 = plt.subplots()
-    ax3.plot(fpr, tpr, label=f'AUC = {auc_score:.2f}')
-    ax3.plot([0, 1], [0, 1], 'k--')
-    st.pyplot(fig3)
+    with st.expander("AUC"):
+        st.write(f"### AUC: {auc_score:.2f}")
+        fig3, ax3 = plt.subplots()
+        ax3.plot(fpr, tpr, label=f'AUC = {auc_score:.2f}')
+        ax3.plot([0, 1], [0, 1], 'k--')
+        st.pyplot(fig3)
 
 # SHAP Values (only for tree-based models)
 if algorithm in ["Decision Tree", "Random Forest"]:
