@@ -94,14 +94,33 @@ with param_container.container():
         min_samples_leaf = st.sidebar.slider("Min Samples Leaf", 1, 10, 1)
         max_features = st.sidebar.selectbox("Max Features", [None, "sqrt", "log2"], index=0)
         criterion = st.sidebar.selectbox("Criterion", ["gini", "entropy"], index=0)
+
+        if criterion == "entropy" and len(features) > 100: # Suggestion
+            st.sidebar.warning("Using 'entropy' with many estimators may slow down training.")
+
         clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=min_samples_split, 
                                      criterion=criterion, min_samples_leaf=min_samples_leaf, max_features=max_features)
 
     elif algorithm == "Logistic Regression":
-        penalty = st.sidebar.selectbox("Penalty", ["l2", "none"])
-        C = st.sidebar.slider("Inverse Regularization Strength (C)", 0.01, 10.0, 1.0)
+        penalty = st.sidebar.selectbox("Penalty", ["l2", "l1", "elasticnet", None])
         solver = st.sidebar.selectbox("Solver", ["lbfgs", "liblinear", "saga"])
-        clf = LogisticRegression(penalty=penalty, C=C, solver=solver, max_iter=1000)
+        
+        # Ensure valid combinations of penalty and solver
+        if penalty == "l1" and solver not in ["liblinear", "saga"]:
+            solver = "liblinear"
+            st.sidebar.warning("l1 penalty is only supported with 'liblinear' or 'saga' solvers. Defaulting to liblinear")
+        elif penalty == "elasticnet" and solver != "saga":
+            solver = "saga"
+            st.sidebar.warning("Elasticnet penalty is only supported with the 'saga' solver.")
+        
+        C = st.sidebar.slider("Inverse Regularization Strength (C)", 0.01, 10.0, 1.0)
+            
+        # Add l1_ratio for elasticnet
+        if penalty == "elasticnet":
+            l1_ratio = st.sidebar.slider("L1 Ratio (Elastic Net)", 0.0, 1.0, 0.5)
+            clf = LogisticRegression(penalty=penalty, C=C, solver=solver, l1_ratio=l1_ratio, max_iter=1000)
+        else:
+            clf = LogisticRegression(penalty=penalty, C=C, solver=solver, max_iter=1000)
 
     elif algorithm == "Random Forest":
         n_estimators = st.sidebar.slider("Number of Estimators", 10, 200, 100)
@@ -112,10 +131,19 @@ with param_container.container():
                                      min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf)
 
     elif algorithm == "SVM":
-        kernel = st.sidebar.selectbox("Kernel", ["linear", "rbf", "poly"])
+        kernel = st.sidebar.selectbox("Kernel", ["linear", "rbf", "poly", "sigmoid"])
         C = st.sidebar.slider("Regularization Strength (C)", 0.01, 10.0, 1.0)
         gamma = st.sidebar.selectbox("Gamma", ["scale", "auto"])
-        clf = SVC(kernel=kernel, C=C, gamma=gamma, probability=True)
+
+        # Handle kernel-specific parameters
+        if kernel == "poly":
+            degree = st.sidebar.slider("Degree (for poly kernel)", 2, 5, 3)
+            clf = SVC(kernel=kernel, C=C, gamma=gamma, degree=degree, probability=True)
+        elif kernel in ["poly", "sigmoid"]:
+            coef0 = st.sidebar.slider("Coef0 (for poly/sigmoid kernel)", 0.0, 1.0, 0.0)
+            clf = SVC(kernel=kernel, C=C, gamma=gamma, coef0=coef0, probability=True)
+        else:
+            clf = SVC(kernel=kernel, C=C, gamma=gamma, probability=True)
 
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
